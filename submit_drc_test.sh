@@ -7,7 +7,7 @@
 #SBATCH -J in_transit_iso_knl
 #SBATCH -d singleton
 #SBATCH -o "drc_test-%j.out"
-module swap PrgEnv-intel/6.0.5 PrgEnv-gnu
+module swap PrgEnv-intel PrgEnv-gnu
 
 M=8192
 N=256

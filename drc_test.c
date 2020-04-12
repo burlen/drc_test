@@ -2,6 +2,8 @@
 #include <mpi.h>
 #include <string.h>
 #include <stdio.h>
+#include <unistd.h>
+#include <stdlib.h>
 
 #define EPRINTF(etag, ...)                              \
 {                                                       \
@@ -100,7 +102,17 @@ int main(int argc, char **argv)
     // NOTE: credential is a uint32_t.
     MPI_Bcast(&credential, sizeof(credential), MPI_BYTE, 0, comm);
 
-    rc = drc_access(credential, 0, &drc_info);
+
+    int try = 0;
+    int max_try = 120;
+    do
+    {
+        sleep(1);
+        rc = drc_access(credential, 0, &drc_info);
+        try += 1;
+    }
+    while ((rc != DRC_SUCCESS) && (try < max_try));
+
     if (rc != DRC_SUCCESS)
     {
         RDMA_DP_ERROR("drc_access %u failed! %d : %s", credential,
@@ -108,9 +120,24 @@ int main(int argc, char **argv)
         MPI_Abort(comm, -1);
     }
 
-    RDMA_DP_STATUS("DRC accessed credential id %d", credential)
+    //RDMA_DP_STATUS("DRC accessed credential id %d", credential)
 
     rc = drc_release(credential, 0);
+
+    // print the distribution of attempts beffore success
+    int *all_try = (int*)malloc(n_ranks*sizeof(int));
+    MPI_Gather(&try, 1, MPI_INT, all_try, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    if (rank == 0)
+    {
+        size_t n_bytes = max_try*sizeof(int);
+        int *try_hist = malloc(n_bytes);
+        memset(try_hist, 0, n_bytes);
+        for (int i = 0; i < n_ranks; ++i)
+            try_hist[all_try[i]] += 1;
+        fprintf(stderr, "pass : number of ranks succeeded\n");
+        for (int i = 0; i < max_try; ++i)
+            fprintf(stderr, "%d : %d\n", i, try_hist[i]);
+    }
 
     MPI_Finalize();
 
